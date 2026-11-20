@@ -38,6 +38,7 @@ jobs:
       - name: Unit tests
         run: python -m pytest -q
       - name: Smoke test (simulated projector, real Qt)
+        timeout-minutes: 3
         env:
           QT_QPA_PLATFORM: offscreen
         run: python -m cinecapture --smoke-test
@@ -56,12 +57,16 @@ jobs:
           packaging/launcher.py
       - name: Smoke test the built app
         shell: pwsh
+        timeout-minutes: 3
         env:
           QT_QPA_PLATFORM: offscreen
+          CCP_LOG: ${{ github.workspace }}\smoke-exe.log
         run: |
-          $p = Start-Process -FilePath dist\CineCapturePro\CineCapturePro.exe -ArgumentList '--smoke-test' -Wait -PassThru
-          Write-Host "Exit code: $($p.ExitCode)"
-          exit $p.ExitCode
+          $p = Start-Process -FilePath dist\CineCapturePro\CineCapturePro.exe -ArgumentList '--smoke-test' -PassThru
+          if (-not $p.WaitForExit(90000)) { Write-Host "App did not exit within 90 s"; Stop-Process -Id $p.Id -Force; $code = 99 } else { $code = $p.ExitCode }
+          Write-Host "Exit code: $code"
+          if (Test-Path $env:CCP_LOG) { Get-Content $env:CCP_LOG }
+          exit $code
       - name: Build installer (Inno Setup)
         shell: pwsh
         run: |

@@ -49,6 +49,30 @@ def _install_crash_handler() -> None:
 
 
 def main(argv=None) -> int:
+    """Start the app. Start-up errors are written to a log instead of a silent crash."""
+    log = os.environ.get("CCP_LOG")
+    if log:
+        # Packaged (windowed) builds have no console: send output to a file.
+        fh = open(log, "a", encoding="utf-8", buffering=1)
+        sys.stdout = sys.stderr = fh
+    try:
+        return _main(argv)
+    except SystemExit:
+        raise
+    except BaseException:  # noqa: BLE001
+        text = traceback.format_exc()
+        print(text, file=sys.stderr)
+        try:
+            with open(_crash_log_path(), "a", encoding="utf-8") as fh2:
+                fh2.write(f"\n=== {datetime.now().isoformat()} (start-up) ===\n{text}")
+        except OSError:
+            pass
+        if _SMOKE or (argv is None and "--smoke-test" in sys.argv):
+            return 6
+        raise
+
+
+def _main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="cinecapture", description="Cine Capture Pro")
     parser.add_argument("--demo", action="store_true",
                         help="use a simulated projector and camera (no hardware needed)")
