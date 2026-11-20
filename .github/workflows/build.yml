@@ -59,9 +59,9 @@ jobs:
         shell: pwsh
         timeout-minutes: 3
         env:
-          QT_QPA_PLATFORM: offscreen
           CCP_LOG: ${{ github.workspace }}\smoke-exe.log
         run: |
+          Get-ChildItem -Recurse dist\CineCapturePro -Filter "q*.dll" | Where-Object { $_.Directory.Name -eq "platforms" } | ForEach-Object { Write-Host "platform plugin: $($_.Name)" }
           $p = Start-Process -FilePath dist\CineCapturePro\CineCapturePro.exe -ArgumentList '--smoke-test' -PassThru
           if (-not $p.WaitForExit(90000)) { Write-Host "App did not exit within 90 s"; Stop-Process -Id $p.Id -Force; $code = 99 } else { $code = $p.ExitCode }
           Write-Host "Exit code: $code"

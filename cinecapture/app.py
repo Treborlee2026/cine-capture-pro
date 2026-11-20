@@ -90,7 +90,12 @@ def _main(argv=None) -> int:
     global _SMOKE
     _SMOKE = args.smoke_test
     _install_crash_handler()
+    if _SMOKE:
+        print(f"SMOKE: starting, frozen={getattr(sys, 'frozen', False)}, "
+              f"platform={os.environ.get('QT_QPA_PLATFORM', 'default')}", flush=True)
     app = QApplication(sys.argv[:1])
+    if _SMOKE:
+        print("SMOKE: QApplication created", flush=True)
     app.setApplicationName(APP_NAME)
     app.setOrganizationName("CineCapturePro")
     apply_theme(app)
@@ -132,7 +137,8 @@ def _smoke_test(app, win) -> int:
         st = getattr(win, "last_stats", None)
         print(f"SMOKE: triggers={st.triggers if st else '?'} saved={st.saved if st else '?'} "
               f"dropped={st.dropped if st else '?'}")
-        ok = st is not None and st.saved >= 5 and st.dropped == 0
+        ok = (st is not None and st.saved >= 5 and st.dropped == 0
+              and st.saved == st.triggers)
         win.close()
         app.exit(0 if ok else 4)
 

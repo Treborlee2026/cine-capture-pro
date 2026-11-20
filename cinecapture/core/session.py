@@ -117,6 +117,9 @@ class CaptureSession:
         self._stats = SessionStats(first_number=first_number)
         self.recording: Optional[CalibrationRecording] = None
         self.test_strip: Deque[Dict[str, Any]] = deque(maxlen=8)
+        self._gate = threading.Lock()      # orders trigger intake / frame submission vs stop
+        self._accepting = False            # new triggers allowed
+        self._closing = False              # writer is being shut down
 
     # ------------------------------------------------------------- listeners
     def subscribe(self, fn: Listener) -> None:
@@ -156,6 +159,8 @@ class CaptureSession:
         self._begin("testing")
 
     def _begin(self, state: str) -> None:
+        self._accepting = True
+        self._closing = False
         self._start_time = now()
         self._trigger_rate.clear()
         self._blank_run = 0
@@ -179,13 +184,18 @@ class CaptureSession:
         (default: the delay plus 0.4 s) for the camera to deliver it."""
         if self.state in ("idle", "stopped"):
             return self.stats()
+        with self._gate:
+            self._accepting = False            # 1. no new triggers from here on
         wait = self.settings.delay + 0.4 if grace is None else grace
         end = now() + wait
         while self._matcher.pending and now() < end:
-            time.sleep(0.005)
-        self._matcher.flush()
+            time.sleep(0.005)                  # 2. let frames still due arrive
+        self._matcher.flush()                  # 3. anything still waiting is a drop
+        time.sleep(0.02)                       # 4. let an in-flight match finish
+        with self._gate:
+            self._closing = True               # 5. later matches are counted as drops
         if self._writer is not None:
-            self._writer.stop()
+            self._writer.stop()                # 6. write everything that was queued
         self._log.write("stop", now() - self._start_time)
         self._log.flush()
         self._set_state("stopped")
@@ -212,9 +222,10 @@ class CaptureSession:
         self._matcher.add_frame(frame)
 
     def on_trigger(self, timestamp: float, source: str = "") -> None:
-        if self.state not in ("capturing", "paused", "testing"):
-            return
-        event = self._matcher.add_trigger(timestamp, source)
+        with self._gate:
+            if not self._accepting or self.state not in ("capturing", "paused", "testing"):
+                return
+            event = self._matcher.add_trigger(timestamp, source)
         if event is None:
             self._log.write("bounce", timestamp - self._start_time)
             return
@@ -264,7 +275,13 @@ class CaptureSession:
             self._record_drop(m.trigger, number, "capture paused")
             return
         assert self._writer is not None
-        if not self._writer.submit(number, m.frame):
+        with self._gate:
+            closing = self._closing
+            accepted = (not closing) and self._writer.submit(number, m.frame)
+        if closing:
+            self._record_drop(m.trigger, number, "capture stopped before the frame was saved")
+            return
+        if not accepted:
             self._record_drop(m.trigger, number, "write buffer full")
             self.pause("The capture drive cannot keep up and the write buffer is full. "
                        "Stop the projector. Capture has been paused.")

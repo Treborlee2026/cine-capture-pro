@@ -99,3 +99,30 @@ def test_simulated_trigger_and_camera_run_in_real_time():
     assert stats.triggers >= 7
     assert stats.matched == stats.triggers and stats.dropped == 0
     assert 20 <= stats.camera_rate <= 40
+
+
+def test_stop_while_running_accounts_for_every_trigger(tmp_path):
+    """Stopping mid-reel must never leave a matched frame unsaved and unreported."""
+    from cinecapture.camera.simulated import RigModel, SimulatedCamera, SimulatedRig
+    from cinecapture.core.session import CaptureSession, SessionSettings
+    from cinecapture.trigger.simulated import SimulatedTriggerSource
+    for run in range(4):
+        rig = SimulatedRig(RigModel(projector_fps=12, camera_fps=60, width=160, height=120))
+        SimulatedRig._instance = rig
+        cam = SimulatedCamera(rig)
+        s = CaptureSession(str(tmp_path / f"r{run}"), SessionSettings(delay=0.06,
+                                                                      end_of_reel=False))
+        cam.on_frame = s.on_camera_frame
+        trig = SimulatedTriggerSource({})
+        s.start_capture()
+        cam.open(cam.list_devices()[0])
+        trig.start(s.on_trigger)
+        time.sleep(0.9 + run * 0.037)
+        stats = s.stop()           # trigger and camera still running, as in real use
+        trig.stop()
+        cam.close()
+        SimulatedRig._instance = None
+        assert stats.saved + stats.dropped == stats.triggers, stats
+        assert stats.saved == stats.matched or stats.dropped > 0
+        import os
+        assert len(os.listdir(tmp_path / f"r{run}")) == stats.saved
