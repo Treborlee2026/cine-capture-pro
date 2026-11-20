@@ -51,7 +51,7 @@ jobs:
       - name: Build app (PyInstaller)
         run: >
           pyinstaller --noconfirm --clean --windowed --name CineCapturePro
-          --collect-submodules cinecapture --collect-submodules pygrabber
+          --paths . --collect-submodules cinecapture --collect-submodules pygrabber
           --hidden-import hid --hidden-import serial.tools.list_ports
           --add-data "LICENSE;."
           packaging/launcher.py
