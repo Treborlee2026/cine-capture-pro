@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cinecapture"
+version = "0.1.0"
+description = "Cine Capture Pro: capture, edit and export 8mm, Super 8 and 16mm cine film"
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6>=6.6",
+    "opencv-python>=4.8",
+    "numpy>=1.24",
+    "hidapi>=0.14",
+    "pyserial>=3.5",
+    "pygrabber>=0.2; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pyinstaller>=6"]
+
+[project.scripts]
+cinecapture = "cinecapture.app:main"
+
+[tool.setuptools.packages.find]
+include = ["cinecapture*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100

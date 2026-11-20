@@ -10,12 +10,12 @@ import pytest
 from cinecapture.camera.base import CameraSettingsLock
 from cinecapture.camera.simulated import RigModel, SimulatedCamera, SimulatedRig, simulate
 from cinecapture.core import analysis
-from cinecapture.core.calibration import CalibrationRecording, check_rate, suggest_delay
+from cinecapture.core.calibration import check_rate, suggest_delay
 from cinecapture.core.frames import Frame
 from cinecapture.core.gauges import GAUGES, footage, format_duration, running_time
 from cinecapture.core.matcher import FrameMatcher, MatcherSettings
-from cinecapture.core.project import Project, Reel
-from cinecapture.core.session import CaptureSession, SessionSettings, wait_until_written
+from cinecapture.core.project import Project
+from cinecapture.core.session import CaptureSession, SessionSettings
 from cinecapture.core.writer import FrameWriter
 
 
@@ -304,3 +304,25 @@ def test_numbering_continues_from_reel(tmp_path):
     run_rig(s, model, 2.0)
     s.stop()
     assert sorted(os.listdir(tmp_path))[0] == "frame_000101.jpg"
+
+
+def test_report_and_preview_render(tmp_path):
+    from cinecapture.core.preview_render import ViewOptions, render
+    from cinecapture.core.report import _ranges, write_report
+    from cinecapture.core.session import SessionStats
+    assert _ranges([3, 4, 5, 9, 11, 12]) == "3-5, 9, 11-12"
+    assert _ranges([]) == "none"
+    p = Project.create(str(tmp_path), "P")
+    r = p.add_reel("Test reel")
+    st = SessionStats(triggers=10, saved=9, dropped=1, dropped_numbers=[4], last_number=10)
+    txt, csv_path = write_report(r, st, SessionSettings(), {"name": "ELP", "values": {"gain": 0}})
+    text = open(txt).read()
+    assert "Dropped frames" in text and "1 (4)" in text and "CHECK" in text
+    assert os.path.exists(csv_path)
+    img = np.full((600, 800, 3), 255, np.uint8)
+    img[:, :400] = 40
+    res = render(img, ViewOptions(flip_h=True, rotate=90, zebra=True, peaking=True,
+                                  max_width=400), (3840, 2160))
+    assert res.image.shape[:2] == (400, 300)          # resized then rotated
+    assert 0.4 < res.clipped < 0.6
+    assert res.source_width == 3840 and res.histogram.shape == (3, 256)
