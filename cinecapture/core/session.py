@@ -174,9 +174,15 @@ class CaptureSession:
         if self.state == "paused":
             self._set_state("capturing")
 
-    def stop(self) -> SessionStats:
+    def stop(self, grace: Optional[float] = None) -> SessionStats:
+        """Stop the run. Triggers still waiting for their frame get ``grace`` seconds
+        (default: the delay plus 0.4 s) for the camera to deliver it."""
         if self.state in ("idle", "stopped"):
             return self.stats()
+        wait = self.settings.delay + 0.4 if grace is None else grace
+        end = now() + wait
+        while self._matcher.pending and now() < end:
+            time.sleep(0.005)
         self._matcher.flush()
         if self._writer is not None:
             self._writer.stop()

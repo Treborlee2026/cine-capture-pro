@@ -93,9 +93,9 @@ def test_simulated_trigger_and_camera_run_in_real_time():
     trig.start(s.on_trigger)
     time.sleep(1.2)
     trig.stop()
+    stats = s.stop()          # the camera keeps running so the last frame can arrive
     cam.close()
-    stats = s.stop()
     SimulatedRig._instance = None
     assert stats.triggers >= 7
-    assert stats.matched >= stats.triggers - 1
+    assert stats.matched == stats.triggers and stats.dropped == 0
     assert 20 <= stats.camera_rate <= 40
